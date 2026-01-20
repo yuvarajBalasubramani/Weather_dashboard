@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import SearchBar from './components/SearchBar';
 import WeatherCard from './components/WeatherCard';
@@ -6,17 +7,19 @@ import HistoryList from './components/HistoryList';
 import AirQualityCard from './components/AirQualityCard';
 import ForecastCard from './components/ForecastCard';
 import MapCard from './components/MapCard';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+import { AuthProvider, AuthContext } from './context/AuthContext';
 import { getWeather, getHistory } from './services/api';
 import './index.css';
 
-function App() {
+// Dashboard component (The original App content)
+const Dashboard = () => {
   const [weatherData, setWeatherData] = useState(null);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-
-  // Coords for map (default to London)
-  const [coords, setCoords] = useState({ lat: 51.505, lon: -0.09 });
+  const { user, logout } = useContext(AuthContext);
 
   const fetchHistory = async () => {
     const data = await getHistory();
@@ -33,11 +36,6 @@ function App() {
     try {
       const data = await getWeather(city);
       setWeatherData(data);
-      if (data.coord) { // Ensure API returns coord (we need to modify backend if not, but currently it returns weatherData which is custom object... wait, we need to add coord to backend response)
-        // Our backend currently returns custom object. Let's fix that in backend or here. 
-        // Oh wait, my backend response 'result' does NOT include lat/lon directly, but it uses them to fetch other data.
-        // currently I don't pass lat/lon to frontend. I need to update backend to pass lat/lon.
-      }
       await fetchHistory();
     } catch (err) {
       setError(err.error || 'Failed to fetch weather');
@@ -47,17 +45,10 @@ function App() {
     }
   };
 
-  // Effect to update map coords when weatherData updates
-  useEffect(() => {
-    if (weatherData && weatherData.coord) {
-      setCoords(weatherData.coord);
-    }
-  }, [weatherData]);
-
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans pb-10">
-      <Navbar />
+      <Navbar /> {/* We might need to update Navbar to show user info/logout */}
 
       <div className="pt-24 px-4 max-w-7xl mx-auto">
         <div className="mb-8">
@@ -80,26 +71,18 @@ function App() {
 
         {weatherData && !loading && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 opacity-0 animate-[fadeIn_0.5s_ease-out_forwards]">
-
-            {/* Left Column: Current Weather & Details (3 cols) */}
             <div className="lg:col-span-3 flex flex-col gap-6">
               <WeatherCard weather={weatherData} />
               <AirQualityCard aqi={weatherData.aqi} />
             </div>
-
-            {/* Middle Column: Map (6 cols) - Dominant Visual */}
             <div className="lg:col-span-6 h-[400px] lg:h-auto min-h-[400px]">
               <MapCard lat={weatherData.coord?.lat} lon={weatherData.coord?.lon} city={weatherData.city} />
             </div>
-
-            {/* Right Column: History & Misc (3 cols) */}
             <div className="lg:col-span-3 flex flex-col gap-6">
               <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 h-full overflow-y-auto max-h-[500px]">
                 <HistoryList history={history} onSelect={handleSearch} />
               </div>
             </div>
-
-            {/* Bottom Row: Forecast (Full Width) */}
             <div className="lg:col-span-12">
               <ForecastCard forecast={weatherData.forecast} />
             </div>
@@ -114,6 +97,34 @@ function App() {
 
       </div>
     </div>
+  );
+};
+
+// Protected Route Wrapper
+const PrivateRoute = ({ children }) => {
+  const { isAuthenticated, loading } = useContext(AuthContext);
+  if (loading) return <div>Loading...</div>;
+  return isAuthenticated ? children : <Navigate to="/login" />;
+};
+
+function App() {
+  return (
+    <AuthProvider>
+      <Router>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route
+            path="/"
+            element={
+              <PrivateRoute>
+                <Dashboard />
+              </PrivateRoute>
+            }
+          />
+        </Routes>
+      </Router>
+    </AuthProvider>
   );
 }
 
